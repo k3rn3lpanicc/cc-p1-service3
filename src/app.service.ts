@@ -89,7 +89,9 @@ export class AppService {
   async sendMail(requestId: string, resultUrl: string, receiver: string) {
     const recipients = [new Recipient(receiver, 'Recipient')];
     const emailParams = new EmailParams()
-      .setFrom(new Sender('k3rn3lpanic@gmail.com', 'k3rn3lpanic'))
+      .setFrom(
+        new Sender('k3rn3lpanic@trial-z3m5jgr2p5xldpyo.mlsender.net', 'Matin'),
+      )
       .setTo(recipients)
       .setSubject('CC-P1-Request result')
       .setText(
@@ -109,22 +111,34 @@ export class AppService {
       .sort({ lastChecked: 'asc' })
       .limit(limit);
     for (const request of readyRequests) {
-      const imageCaption = request.imageCaption;
-      const createdImage = await this.getImageResult(imageCaption);
-      console.log({ id: request.id });
+      let resultURL: string;
+      if (!request.resultUrl.startsWith('https://')) {
+        try {
+          const imageCaption = request.imageCaption;
+          const createdImage = await this.getImageResult(imageCaption);
+          console.log({ id: request.id });
+          resultURL = await this.uploadResult(request.id, createdImage);
+          request.resultUrl = resultURL;
+          request.state = STATE.DONE;
+          request.save();
+          console.log({ resultURL });
+        } catch (ex: any) {
+          console.log({ ex });
+          request.state = STATE.FAILED;
+          request.save();
+          continue;
+        }
+      }
       try {
-        const resultURL = await this.uploadResult(request.id, createdImage);
-        request.resultUrl = resultURL;
-        request.state = STATE.DONE;
-        console.log({ resultURL });
+        console.log({ id: request.id, resultURL, mail: request.email });
         await this.sendMail(request.id, resultURL, request.email);
+        request.state = STATE.SENT;
         console.log('Sent email');
         request.save();
       } catch (err: any) {
-        console.log(
-          `Will be retried, Error uploading the image to liara: `,
-          err,
-        );
+        request.state = STATE.FAILED;
+        request.save();
+        console.log(`Will be retried, Sending email: `, err);
       }
     }
   }
